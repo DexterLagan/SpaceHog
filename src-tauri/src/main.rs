@@ -216,9 +216,13 @@ fn reveal(drive: String, rel: String, is_file: bool) -> Result<(), String> {
 
 /// Moves to the Recycle Bin (undoable). Items too big for the bin are refused rather than erased.
 #[tauri::command(async)]
-fn delete_path(drive: String, rel: String) -> Result<(), String> {
+fn delete_path(state: State<AppState>, drive: String, rel: String) -> Result<DriveView, String> {
     use windows_sys::Win32::UI::Shell::*;
+    if state.scanning.load(SeqCst) {
+        return Err("a scan is running; try again when it finishes".into());
+    }
     let p = resolve(&drive, &rel)?;
+    let is_dir = p.is_dir();
     if !p.exists() {
         return Err("already gone".into());
     }
@@ -232,7 +236,23 @@ fn delete_path(drive: String, rel: String) -> Result<(), String> {
     if rc != 0 || op.fAnyOperationsAborted != 0 {
         return Err(format!("could not move to Recycle Bin (code {rc})"));
     }
-    Ok(())
+
+    // Update the stored tree in place instead of rescanning.
+    let comps: Vec<&str> = rel.split('\\').collect();
+    let (data, snapshot) = {
+        let mut g = state.drives.lock().unwrap();
+        let arc = g.get_mut(&drive).ok_or("drive not scanned")?;
+        let d = Arc::make_mut(arc); // no copy unless something else still holds this snapshot
+        apply_delete(&mut d.root, &PathBuf::from(format!("{drive}\\")), &comps, is_dir);
+        let data = arc.clone();
+        (data, g.values().cloned().collect::<Vec<_>>())
+    };
+    {
+        let _g = state.save_lock.lock().unwrap();
+        let _ = store::save(&state.db_path, &snapshot);
+    }
+    let info = list_drives().into_iter().find(|i| i.letter == drive).ok_or("drive not found")?;
+    Ok(view(&info, Some(&data)))
 }
 
 fn main() {

@@ -11,7 +11,7 @@ pub const TOP_N: usize = 10;
 
 /// One directory. `top` holds the largest files directly inside it (descending),
 /// `size` is the aggregate of everything below.
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Clone)]
 pub struct Node {
     pub name: String,
     pub mtime: u64,
@@ -22,7 +22,7 @@ pub struct Node {
     pub children: Vec<Node>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct DriveData {
     pub letter: String,
     pub scanned_at: u64,
@@ -162,6 +162,52 @@ pub fn scan_dir(
     node
 }
 
+/// Re-read only the direct files of one directory: (bytes, count, largest files).
+fn read_own_files(path: &Path) -> (u64, u32, Vec<(u64, String)>) {
+    let (mut size, mut count, mut heap) = (0u64, 0u32, TopHeap::new());
+    if let Ok(rd) = fs::read_dir(path) {
+        for entry in rd.flatten() {
+            let Ok(ft) = entry.file_type() else { continue };
+            if ft.is_symlink() || ft.is_dir() {
+                continue;
+            }
+            let Ok(md) = entry.metadata() else { continue };
+            let len = disk_size(&entry, &md);
+            size += len;
+            count += 1;
+            push_top(&mut heap, len, || entry.file_name().to_string_lossy().into_owned());
+        }
+    }
+    (size, count, heap.into_sorted_vec().into_iter().map(|r| r.0).collect())
+}
+
+/// After `comps` (path components below `node`) was deleted from disk, update the tree:
+/// drop the subdirectory, or refresh the parent's file list, then recompute sizes on the way up.
+pub fn apply_delete(node: &mut Node, path: &Path, comps: &[&str], is_dir: bool) {
+    match comps {
+        [] => return,
+        [last] => {
+            if is_dir {
+                node.children.retain(|c| c.name != *last);
+            } else {
+                let (s, n, top) = read_own_files(path);
+                node.own_size = s;
+                node.own_files = n;
+                node.top = top;
+            }
+            if let Ok(md) = fs::metadata(path) {
+                node.mtime = mtime_of(&md);
+            }
+        }
+        [first, rest @ ..] => {
+            if let Some(child) = node.children.iter_mut().find(|c| c.name == *first) {
+                apply_delete(child, &path.join(first), rest, is_dir);
+            }
+        }
+    }
+    node.size = node.own_size + node.children.iter().map(|c| c.size).sum::<u64>();
+}
+
 pub struct DriveInfo {
     pub letter: String,
     pub total: u64,
@@ -191,4 +237,66 @@ pub fn list_drives() -> Vec<DriveInfo> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn write(p: &Path, n: usize) {
+        fs::create_dir_all(p.parent().unwrap()).unwrap();
+        fs::write(p, vec![0u8; n]).unwrap();
+    }
+
+    /// Compare everything except mtimes (ancestors keep their old mtime after an in-place update).
+    fn same(a: &Node, b: &Node) {
+        assert_eq!((&a.name, a.size, a.own_size, a.own_files, &a.top), (&b.name, b.size, b.own_size, b.own_files, &b.top));
+        let mut ac: Vec<_> = a.children.iter().collect();
+        let mut bc: Vec<_> = b.children.iter().collect();
+        ac.sort_by(|x, y| x.name.cmp(&y.name));
+        bc.sort_by(|x, y| x.name.cmp(&y.name));
+        assert_eq!(ac.len(), bc.len());
+        for (x, y) in ac.into_iter().zip(bc) {
+            same(x, y);
+        }
+    }
+
+    fn scan(root: &Path) -> Node {
+        let md = fs::metadata(root).unwrap();
+        scan_dir(root, "root".into(), mtime_of(&md), None, true, &Progress::default())
+    }
+
+    #[test]
+    fn delete_updates_match_fresh_scan() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target").join("spacehog-test-tree");
+        let _ = fs::remove_dir_all(&root);
+        // 12 files in a/ so deleting the biggest must refill the top 10 from disk
+        for i in 0..12 {
+            write(&root.join(format!("a/f{i:02}")), 1000 + i * 10);
+        }
+        write(&root.join("a/sub/deep.bin"), 5000);
+        write(&root.join("b/g"), 70);
+
+        let mut tree = scan(&root);
+        assert_eq!(tree.children.iter().find(|c| c.name == "a").unwrap().top.len(), TOP_N);
+
+        // delete the largest file in a/ (a file, nested one level)
+        fs::remove_file(root.join("a/f11")).unwrap();
+        apply_delete(&mut tree, &root, &["a", "f11"], false);
+        same(&tree, &scan(&root));
+        assert_eq!(tree.children.iter().find(|c| c.name == "a").unwrap().top.len(), TOP_N);
+
+        // delete a nested folder
+        fs::remove_dir_all(root.join("a/sub")).unwrap();
+        apply_delete(&mut tree, &root, &["a", "sub"], true);
+        same(&tree, &scan(&root));
+
+        // delete a top-level folder
+        fs::remove_dir_all(root.join("b")).unwrap();
+        apply_delete(&mut tree, &root, &["b"], true);
+        same(&tree, &scan(&root));
+        assert!(tree.children.iter().all(|c| c.name != "b"));
+
+        let _ = fs::remove_dir_all(&root);
+    }
 }

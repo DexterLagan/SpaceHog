@@ -2923,7 +2923,7 @@ dependencies = [
 
 [[package]]
 name = "spacehog"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "bincode",
  "lz4_flex",

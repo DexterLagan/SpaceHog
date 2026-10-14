@@ -12,6 +12,8 @@ A tiny, portable, brutalist disk-usage viewer for Windows. One 4.5 MB executable
 - The size sits **inside the bar** when it fits, **to its right** when it doesn't.
 - **Click a folder** to unroll the **10 largest files** anywhere inside it.
 - **Right-click** a folder or file for *Show in Explorer* or *Delete…* (asks for confirmation, then moves it to the **Recycle Bin**, so it's undoable).
+- Deleting updates the display and totals instantly (no rescan); each drive header also shows how much was **scanned**.
+- An **About** dialog, because credit where due.
 - Dark mode only. Sharp corners. No animations.
 
 ## Speed
@@ -35,7 +37,8 @@ On launch, SpaceHog reuses the stored data and only re-reads directories whose *
 
 - Size on disk, not logical size: OneDrive *online-only* placeholders count as 0 and sparse/compressed files use their allocated size.
 - Symlinks and junctions are not followed (no loops, no double counting).
-- Hard links are counted once per link.
+- Hard links are counted once per link (so "scanned" can exceed "used", notably on C: because of `WinSxS`).
+- The Recycle Bin keeps deleted data on disk until emptied, so the drive's "used" figure from Windows only drops after you empty it; "scanned" drops immediately.
 - Run without admin rights, protected folders (e.g. `System Volume Information`) can't be read and are skipped.
 
 ## Build
@@ -47,7 +50,7 @@ cd src-tauri
 cargo build --release
 ```
 
-The portable executable is `src-tauri/target/release/spacehog.exe`.
+The portable executable is `src-tauri/target/release/spacehog.exe`. Prebuilt Windows x64 binaries are on the [Releases](https://github.com/DexterLagan/SpaceHog/releases) page (unsigned, so SmartScreen may ask you to confirm on first run).
 
 ## License
 

@@ -10,6 +10,7 @@
 <header id="top">
   <h1>SPACEHOG</h1>
   <span id="status"></span>
+  <button id="about">ABOUT</button>
   <button id="rescan" title="Re-read every directory, ignoring the stored modification dates">FULL RESCAN</button>
 </header>
 <main id="drives"></main>
@@ -26,6 +27,15 @@
     <p class="note">Moves to the Recycle Bin.</p>
     <p id="modal-err" class="err"></p>
     <div class="btns"><button id="modal-cancel">CANCEL</button><button id="modal-ok" class="danger">DELETE</button></div>
+  </div>
+</div>
+<div id="about-modal" hidden>
+  <div class="box">
+    <h3>SPACEHOG <span id="about-ver"></span></h3>
+    <p>See what takes space on your drives.</p>
+    <p class="by">by Dexter Santucci</p>
+    <p class="note">MIT License · github.com/DexterLagan/SpaceHog</p>
+    <div class="btns"><button id="about-close">CLOSE</button></div>
   </div>
 </div>
 <script src="main.js"></script>

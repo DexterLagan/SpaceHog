@@ -65,7 +65,8 @@ function renderDrive(v) {
     drives.set(v.letter, d);
   }
   d.view = v;
-  d.metaEl.textContent = `${fmt(v.total - v.free)} used of ${fmt(v.total)} · ${fmt(v.free)} free`;
+  d.metaEl.textContent = `${fmt(v.total - v.free)} used of ${fmt(v.total)} · ${fmt(v.free)} free` +
+    (v.hasData ? ` · ${fmt(v.scannedBytes)} scanned` : "");
   d.list.replaceChildren();
   if (!v.has_data && !v.hasData) {
     d.list.appendChild(el("li", "empty", "no data yet — scanning…"));
@@ -172,9 +173,9 @@ $("#modal-cancel").addEventListener("click", closeModal);
 $("#modal-ok").addEventListener("click", async () => {
   if (!pending) return;
   try {
-    await invoke("delete_path", { drive: pending.drive, rel: pending.rel });
+    const v = await invoke("delete_path", { drive: pending.drive, rel: pending.rel });
     closeModal();
-    startScan(false); // incremental: the parent directory's mtime changed, so it gets re-read
+    renderDrive(v); // backend already updated its tree and totals; no rescan needed
   } catch (err) {
     $("#modal-err").textContent = String(err);
   }
@@ -216,3 +217,13 @@ listen("scan-finished", () => {
   } catch (e) { setStatus("error: " + e); }
   startScan(false);
 })();
+
+// ---- about ----
+const aboutModal = $("#about-modal");
+$("#about").addEventListener("click", async () => {
+  try { $("#about-ver").textContent = "v" + (await window.__TAURI__.app.getVersion()); } catch {}
+  aboutModal.hidden = false;
+});
+$("#about-close").addEventListener("click", () => (aboutModal.hidden = true));
+aboutModal.addEventListener("click", (e) => { if (e.target === aboutModal) aboutModal.hidden = true; });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") aboutModal.hidden = true; });
