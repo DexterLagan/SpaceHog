@@ -168,24 +168,25 @@ fn run_scan(app: tauri::AppHandle, full_requested: bool) {
 }
 
 #[tauri::command(async)]
-fn top_files(state: State<AppState>, drive: String, folder: String) -> Vec<FileView> {
+fn top_files(state: State<AppState>, drive: String, folder: String, limit: usize) -> Vec<FileView> {
+    let limit = limit.clamp(1, STORE_TOP);
     let Some(data) = state.drives.lock().unwrap().get(&drive).cloned() else { return Vec::new() };
     let Some(node) = data.root.children.iter().find(|c| c.name == folder) else { return Vec::new() };
 
-    fn walk(n: &Node, prefix: &mut String, heap: &mut TopHeap) {
+    fn walk(n: &Node, prefix: &mut String, heap: &mut TopHeap, limit: usize) {
         for (size, name) in &n.top {
-            push_top(heap, *size, || format!("{prefix}{name}"));
+            push_top(heap, limit, *size, || format!("{prefix}{name}"));
         }
         for c in &n.children {
             let len = prefix.len();
             prefix.push_str(&c.name);
             prefix.push('\\');
-            walk(c, prefix, heap);
+            walk(c, prefix, heap, limit);
             prefix.truncate(len);
         }
     }
     let mut heap = TopHeap::new();
-    walk(node, &mut String::new(), &mut heap);
+    walk(node, &mut String::new(), &mut heap, limit);
     heap.into_sorted_vec().into_iter().map(|r| FileView { path: r.0 .1, size: r.0 .0 }).collect()
 }
 

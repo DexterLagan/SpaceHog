@@ -73,3 +73,6 @@ ul.rows { list-style: none; }
 #about-modal .by { font-size: 18px; font-weight: 700; }
 #about-modal .note { color: var(--dim); }
 #about-modal .btns { display: flex; justify-content: flex-end; }
+
+.files .more { padding: 6px 28px 2px; }
+.files .more button { width: 100%; padding: 4px 12px; border-width: 2px; }

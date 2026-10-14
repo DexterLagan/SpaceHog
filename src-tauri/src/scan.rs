@@ -7,7 +7,10 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
 use std::time::UNIX_EPOCH;
 
+/// Folders shown per drive.
 pub const TOP_N: usize = 10;
+/// Largest files kept per directory. Bounds how many files a folder can list.
+pub const STORE_TOP: usize = 100;
 
 /// One directory. `top` holds the largest files directly inside it (descending),
 /// `size` is the aggregate of everything below.
@@ -40,10 +43,10 @@ pub struct Progress {
 pub type TopHeap = BinaryHeap<Reverse<(u64, String)>>;
 
 /// Push (size, name) if it belongs in the top N. The name closure only runs when it does.
-pub fn push_top(heap: &mut TopHeap, size: u64, name: impl FnOnce() -> String) {
-    if heap.len() < TOP_N || size > heap.peek().map_or(0, |r| r.0 .0) {
+pub fn push_top(heap: &mut TopHeap, cap: usize, size: u64, name: impl FnOnce() -> String) {
+    if heap.len() < cap || size > heap.peek().map_or(0, |r| r.0 .0) {
         heap.push(Reverse((size, name())));
-        if heap.len() > TOP_N {
+        if heap.len() > cap {
             heap.pop();
         }
     }
@@ -139,7 +142,7 @@ pub fn scan_dir(
                     let len = disk_size(&entry, &md);
                     node.own_size += len;
                     node.own_files += 1;
-                    push_top(&mut heap, len, || entry.file_name().to_string_lossy().into_owned());
+                    push_top(&mut heap, STORE_TOP, len, || entry.file_name().to_string_lossy().into_owned());
                 }
             }
             p.files.fetch_add(node.own_files as u64, Relaxed);
@@ -175,7 +178,7 @@ fn read_own_files(path: &Path) -> (u64, u32, Vec<(u64, String)>) {
             let len = disk_size(&entry, &md);
             size += len;
             count += 1;
-            push_top(&mut heap, len, || entry.file_name().to_string_lossy().into_owned());
+            push_top(&mut heap, STORE_TOP, len, || entry.file_name().to_string_lossy().into_owned());
         }
     }
     (size, count, heap.into_sorted_vec().into_iter().map(|r| r.0).collect())
@@ -270,21 +273,21 @@ mod tests {
     fn delete_updates_match_fresh_scan() {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target").join("spacehog-test-tree");
         let _ = fs::remove_dir_all(&root);
-        // 12 files in a/ so deleting the biggest must refill the top 10 from disk
-        for i in 0..12 {
-            write(&root.join(format!("a/f{i:02}")), 1000 + i * 10);
+        // more files than the cap so deleting the biggest must refill the list from disk
+        for i in 0..STORE_TOP + 2 {
+            write(&root.join(format!("a/f{i:03}")), 1000 + i * 10);
         }
         write(&root.join("a/sub/deep.bin"), 5000);
         write(&root.join("b/g"), 70);
 
         let mut tree = scan(&root);
-        assert_eq!(tree.children.iter().find(|c| c.name == "a").unwrap().top.len(), TOP_N);
+        assert_eq!(tree.children.iter().find(|c| c.name == "a").unwrap().top.len(), STORE_TOP);
 
         // delete the largest file in a/ (a file, nested one level)
-        fs::remove_file(root.join("a/f11")).unwrap();
-        apply_delete(&mut tree, &root, &["a", "f11"], false);
+        fs::remove_file(root.join(format!("a/f{:03}", STORE_TOP + 1))).unwrap();
+        apply_delete(&mut tree, &root, &["a", &format!("f{:03}", STORE_TOP + 1)], false);
         same(&tree, &scan(&root));
-        assert_eq!(tree.children.iter().find(|c| c.name == "a").unwrap().top.len(), TOP_N);
+        assert_eq!(tree.children.iter().find(|c| c.name == "a").unwrap().top.len(), STORE_TOP);
 
         // delete a nested folder
         fs::remove_dir_all(root.join("a/sub")).unwrap();

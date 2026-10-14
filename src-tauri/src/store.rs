@@ -5,7 +5,7 @@ use std::io::{BufReader, BufWriter, Write};
 use std::path::Path;
 use std::sync::Arc;
 
-const VERSION: u32 = 2;
+const VERSION: u32 = 3;
 
 #[derive(Serialize)]
 struct DbOut<'a> {

@@ -103,9 +103,18 @@ async function toggle(letter, folder, arrow, files, forceOpen = false) {
   expanded.add(key);
   files.hidden = false;
   arrow.textContent = "▼";
-  files.replaceChildren(el("li", "msg", "loading…"));
+  await loadFiles(letter, folder, files, true);
+}
+
+const STEP = 10, MAX = 100; // MAX matches the per-directory cap stored by the backend
+const limits = new Map();   // "C:|Windows" -> how many files to show
+
+async function loadFiles(letter, folder, files, showLoading) {
+  const key = letter + "|" + folder;
+  const limit = limits.get(key) || STEP;
+  if (showLoading) files.replaceChildren(el("li", "msg", "loading…"));
   try {
-    const list = await invoke("top_files", { drive: letter, folder });
+    const list = await invoke("top_files", { drive: letter, folder, limit });
     files.replaceChildren();
     if (!list.length) files.appendChild(el("li", "msg", "no files"));
     const max = list.length ? list[0].size : 0;
@@ -121,6 +130,16 @@ async function toggle(letter, folder, arrow, files, forceOpen = false) {
       const li = el("li");
       li.appendChild(line);
       files.appendChild(li);
+    }
+    if (list.length >= limit && limit < MAX) { // a full page means there may be more
+      const more = el("li", "more");
+      const btn = el("button", null, `+ ${STEP} MORE`);
+      btn.addEventListener("click", () => {
+        limits.set(key, Math.min(limit + STEP, MAX));
+        loadFiles(letter, folder, files, false);
+      });
+      more.appendChild(btn);
+      files.appendChild(more);
     }
     fitLabels(files);
   } catch (e) {

@@ -10,7 +10,7 @@ A tiny, portable, brutalist disk-usage viewer for Windows. One 4.5 MB executable
 
 - One section per fixed drive (C:, D:, …) listing the **10 biggest top-level folders**, each with a bar showing its relative size.
 - The size sits **inside the bar** when it fits, **to its right** when it doesn't.
-- **Click a folder** to unroll the **10 largest files** anywhere inside it.
+- **Click a folder** to unroll the **10 largest files** anywhere inside it; press **+ 10 MORE** to extend the list, up to 100.
 - **Right-click** a folder or file for *Show in Explorer* or *Delete…* (asks for confirmation, then moves it to the **Recycle Bin**, so it's undoable).
 - Deleting updates the display and totals instantly (no rescan); each drive header also shows how much was **scanned**.
 - An **About** dialog, because credit where due.
