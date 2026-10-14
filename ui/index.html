@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SpaceHog</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="top">
+  <h1>SPACEHOG</h1>
+  <span id="status"></span>
+  <button id="rescan" title="Re-read every directory, ignoring the stored modification dates">FULL RESCAN</button>
+</header>
+<main id="drives"></main>
+
+<ul id="menu" hidden>
+  <li data-act="reveal">SHOW IN EXPLORER</li>
+  <li data-act="delete" class="danger">DELETE…</li>
+</ul>
+
+<div id="modal" hidden>
+  <div class="box">
+    <h3>DELETE?</h3>
+    <p id="modal-path"></p>
+    <p class="note">Moves to the Recycle Bin.</p>
+    <p id="modal-err" class="err"></p>
+    <div class="btns"><button id="modal-cancel">CANCEL</button><button id="modal-ok" class="danger">DELETE</button></div>
+  </div>
+</div>
+<script src="main.js"></script>
+</body>
+</html>
